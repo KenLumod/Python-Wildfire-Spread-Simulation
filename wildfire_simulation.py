@@ -1,24 +1,12 @@
-"""
-================================================================================
-  WILDFIRE SPREAD SIMULATION
-  CS422 – Computational Modelling
-  Agent-Based Model with Stochastic Spread
-================================================================================
-"""
-
 import math
 import random
 import time
 import tkinter as tk
 from tkinter import font as tkfont
 
-
-# ================================================================================
-# SECTION 1 — SIMULATION ENGINE
 # Model Logic, Formulas, and Calculations
-# ================================================================================
 
-# ── SIMULATION CONSTANTS ────────────────────────────────────────────────────────
+# SIMULATION CONSTANTS 
 COLS            = 50
 ROWS            = 40
 CELL            = 12
@@ -39,14 +27,13 @@ BURN_OUT_CHANCE = 0.28
 NEIGHBORS       = [(-1, 0), (1, 0), (0, -1), (0, 1),
                    (-1, -1), (-1, 1), (1, -1), (1, 1)]
 
-# Wind boost coefficient used in spread probability formula
+# Wind boost coefficient
 WIND_BOOST_COEFF = 0.35
 
 # Probability clamp bounds
 PROB_MIN = 0.02
 PROB_MAX = 0.98
 
-# Cell colors used for rendering
 COLORS = {
     TREE:    "#27a446",
     ASH:     "#404754",
@@ -55,8 +42,6 @@ COLORS = {
 FIRE_COLORS = ["#e84c1e", "#f5870a", "#faa030"]
 
 
-# ── SPREAD PROBABILITY FORMULA ──────────────────────────────────────────────────
-#
 #   P = min(0.98, max(0.02, p₀ + (n̂ · ŵ) × 0.35))
 #
 #   Where:
@@ -65,97 +50,56 @@ FIRE_COLORS = ["#e84c1e", "#f5870a", "#faa030"]
 #     0.35    = wind boost coefficient
 #
 def spread_prob(neighbor_dc, neighbor_dr, wind_dx, wind_dy, wind_speed):
-    """
-    Compute fire spread probability from a burning cell to a neighbor.
 
-    Parameters
-    ----------
-    neighbor_dc : int  Column delta toward the neighbor (-1, 0, or 1)
-    neighbor_dr : int  Row delta toward the neighbor (-1, 0, or 1)
-    wind_dx     : int  Wind direction x-component
-    wind_dy     : int  Wind direction y-component
-    wind_speed  : int  Wind speed level 1–5
+    # Compute fire spread probability from a burning cell to a neighbor.
+    # neighbor_dc : int  Column delta toward the neighbor (-1, 0, or 1)
+    # neighbor_dr : int  Row delta toward the neighbor (-1, 0, or 1)
+    # wind_dx     : int  Wind direction x-component
+    # wind_dy     : int  Wind direction y-component
+    # wind_speed  : int  Wind speed level 1–5
+    # Clamped probability in [0.02, 0.98]
 
-    Returns
-    -------
-    float  Clamped probability in [0.02, 0.98]
-    """
     base       = BASE_PROB[wind_speed - 1]
     dot        = neighbor_dc * wind_dx + neighbor_dr * wind_dy
     wind_boost = dot * WIND_BOOST_COEFF
     return min(PROB_MAX, max(PROB_MIN, base + wind_boost))
 
 
-# ── SIMULATION INTERVAL FORMULA ─────────────────────────────────────────────────
-#
+# SIMULATION INTERVAL FORMULA
 #   Δt = max(60, 520 − v × 80)   [milliseconds]
-#
+
 #   Where v is wind speed level 1–5.
 #   Higher wind speed → shorter interval → faster simulation.
-#
+
 def get_interval(wind_speed):
-    """
-    Compute tick interval in milliseconds based on wind speed.
+    # Compute tick interval in milliseconds based on wind speed.
 
-    Parameters
-    ----------
-    wind_speed : int  Wind speed level 1–5
-
-    Returns
-    -------
-    int  Interval in milliseconds
-    """
     return max(60, 520 - wind_speed * 80)
 
 
-# ── GRID INITIALISATION ─────────────────────────────────────────────────────────
+# GRID INITIALISATION
 def init_grid():
-    """
-    Create a fresh ROWS × COLS grid where every cell is TREE.
-
-    Returns
-    -------
-    list[list[int]]  2D grid of TREE state integers
-    """
     return [[TREE for _ in range(COLS)] for _ in range(ROWS)]
 
 
 def copy_grid(src):
-    """
-    Shallow-copy a grid so tick transitions are computed from a stable snapshot.
-
-    Parameters
-    ----------
-    src : list[list[int]]  Source grid
-
-    Returns
-    -------
-    list[list[int]]  Independent copy
-    """
     return [row[:] for row in src]
 
 
-# ── ABM SIMULATION STEP ─────────────────────────────────────────────────────────
+# ABM SIMULATION STEP
 def simulation_step(grid, wind_dx, wind_dy, wind_speed):
-    """
-    Advance the simulation by one tick using Agent-Based Model rules.
+    # Advance the simulation by one tick using Agent-Based Model rules.
 
-    Rules applied per burning cell:
-      1. Burn-out: 28% chance the cell transitions to ASH.
-      2. Spread:   For each of 8 neighbors that is TREE,
-                   ignite it with probability P (spread_prob formula).
+    # Rules applied per burning cell:
+    #   1. Burn-out: 28% chance the cell transitions to ASH.
+    #   2. Spread:   For each of 8 neighbors that is TREE,
+    #                ignite it with probability P (spread_prob formula).
 
-    Parameters
-    ----------
-    grid       : list[list[int]]  Current grid state
-    wind_dx    : int               Wind x-direction component
-    wind_dy    : int               Wind y-direction component
-    wind_speed : int               Wind speed level 1–5
+    # grid       : list[list[int]]  Current grid state
+    # wind_dx    : int               Wind x-direction component
+    # wind_dy    : int               Wind y-direction component
+    # wind_speed : int               Wind speed level 1–5
 
-    Returns
-    -------
-    list[list[int]]  Updated grid after one tick
-    """
     next_grid = copy_grid(grid)
 
     for r in range(ROWS):
@@ -179,27 +123,19 @@ def simulation_step(grid, wind_dx, wind_dy, wind_speed):
     return next_grid
 
 
-# ── METRICS CALCULATION ─────────────────────────────────────────────────────────
-#
-#   burned_pct = (ASH cells + BURNING cells) / total cells × 100
-#   perimeter  = burning_count × 0.12   [km]
-#
+# METRICS CALCULATION 
+
+#  burned_pct = (ASH cells + BURNING cells) / total cells × 100
+#  perimeter  = burning_count × 0.12   [km]
+
 def compute_metrics(grid):
-    """
-    Compute simulation metrics from the current grid state.
 
-    Parameters
-    ----------
-    grid : list[list[int]]  Current grid
+    # Compute simulation metrics from the current grid state.
+    # burned_pct  (float)  Percentage of grid burned or burning
+    # perimeter   (float)  Estimated fire perimeter in km
+    # fire_fronts (int)    Count of currently burning cells
+    # has_fire    (bool)   Whether any burning cells remain
 
-    Returns
-    -------
-    dict with keys:
-        burned_pct  (float)  Percentage of grid burned or burning
-        perimeter   (float)  Estimated fire perimeter in km
-        fire_fronts (int)    Count of currently burning cells
-        has_fire    (bool)   Whether any burning cells remain
-    """
     total   = ROWS * COLS
     burned  = 0
     burning = 0
@@ -223,27 +159,18 @@ def compute_metrics(grid):
     }
 
 
-# ── ERROR METRICS ────────────────────────────────────────────────────────────────
-#
+#  ERROR METRICS
+
 #   MSE   = (1/n) × Σ (actual_i − expected_i)²
 #   RMSE  = √MSE
 #   NRMSE = (RMSE / (max − min)) × 100%
-#
+
 #   Baseline: linear (uniform) spread from 0% to final burned %.
-#
+
 def compute_error_metrics(burn_history):
-    """
-    Compute MSE, RMSE, and NRMSE comparing actual burn progression
-    against a uniform linear spread baseline.
 
-    Parameters
-    ----------
-    burn_history : list[float]  Sequence of burned_pct values over time
+    # Compute MSE, RMSE, and NRMSE comparing actual burn progression against a uniform linear spread baseline.
 
-    Returns
-    -------
-    dict  Keys: mse, rmse, nrmse  (or None values if insufficient data)
-    """
     if len(burn_history) < 5:
         return {"mse": None, "rmse": None, "nrmse": None}
 
@@ -266,15 +193,13 @@ def compute_error_metrics(burn_history):
     }
 
 
-# ================================================================================
-# SECTION 2 — UI AND FRONTEND
-# Rendering, Layout, Controls, and Event Handling
-# ================================================================================
 
-# ── SPEED LABELS ────────────────────────────────────────────────────────────────
+# Rendering, Layout, Controls, and Event Handling
+
+#  SPEED LABELS
 SPEED_LABELS = {1: "Very Low", 2: "Low", 3: "Medium", 4: "High", 5: "Very High"}
 
-# ── COMPASS DIRECTION DEFINITIONS ───────────────────────────────────────────────
+#  COMPASS DIRECTION DEFINITIONS 
 COMPASS_DIRS = [
     {"label": "↖", "dx": -1, "dy": -1, "row": 0, "col": 0},
     {"label": "↑", "dx":  0, "dy": -1, "row": 0, "col": 1},
@@ -345,16 +270,10 @@ class WildfireApp:
         hdr.pack(pady=(14, 0))
 
         tk.Label(
-            hdr, text="🔥 Wildfire Spread Simulation",
+            hdr, text="Wildfire Spread Simulation",
             bg=BG, fg=TEXT,
             font=("Helvetica", 18, "bold"),
         ).pack()
-
-        tk.Label(
-            hdr, text="AGENT-BASED MODEL  ·  CS422 COMPUTATIONAL MODELLING",
-            bg=BG, fg=TEXT_MUTED,
-            font=("Helvetica", 8),
-        ).pack(pady=(2, 0))
 
     # ── MAIN SHELL ──────────────────────────────────────────────────────────────
     def _build_shell(self):
